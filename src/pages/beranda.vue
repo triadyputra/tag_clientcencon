@@ -1,0 +1,341 @@
+<script setup lang="ts">
+definePage({
+  meta: {
+    action: 'read',
+    subject: 'Beranda',
+    public: false,
+  },
+})
+
+interface ViewListData {
+  Id: number
+  NOWO: string
+  WSID: string
+  Tanggal?: string | null // bisa string ISO atau null
+  Jam?: string | null // bisa string ISO atau null
+  JReqOpen?: string | null
+  JReqClose?: string | null
+  KDClose?: string | null
+  Lokasi?: string | null
+  Mesin?: string | null
+  NMCABANG?: string | null
+}
+
+interface StatusResult {
+  text: string
+  color: string
+}
+
+const widgetData = ref([
+  { title: 'In-Store Sales', value: '$5,345', icon: 'tabler-smart-home', desc: '5k orders', change: 5.7 },
+  { title: 'Website Sales', value: '$674,347', icon: 'tabler-device-laptop', desc: '21k orders', change: 12.4 },
+  { title: 'Discount', value: '$14,235', icon: 'tabler-gift', desc: '6k orders' },
+  { title: 'Affiliate', value: '$8,345', icon: 'tabler-wallet', desc: '150 orders', change: -3.5 },
+])
+
+const headers = [
+  { title: 'No WO', key: 'NOWO' },
+  { title: 'WSID', key: 'WSID' },
+  { title: 'Tanggal', key: 'Tanggal' },
+  { title: 'Jam', key: 'Jam' },
+  { title: 'JReq Open', key: 'JReqOpen' },
+  { title: 'JReq Close', key: 'JReqClose' },
+  { title: 'KD Close', key: 'KDClose' },
+  { title: 'Lokasi', key: 'Lokasi' },
+  { title: 'Mesin', key: 'Mesin' },
+  { title: 'Nama Cabang', key: 'NMCABANG' },
+  { title: 'Status', key: 'status' },
+  { title: 'Actions', key: 'actions', sortable: false }, // jika masih ada tombol aksi
+]
+
+const selectedStatus = ref()
+const selectedCategory = ref()
+const selectedStock = ref<boolean | undefined>()
+const searchQuery = ref('')
+const selectedRows = ref([])
+
+const status = ref([
+  { title: 'Scheduled', value: 'Scheduled' },
+  { title: 'Publish', value: 'Published' },
+  { title: 'Inactive', value: 'Inactive' },
+])
+
+const categories = ref([
+  { title: 'Accessories', value: 'Accessories' },
+  { title: 'Home Decor', value: 'Home Decor' },
+  { title: 'Electronics', value: 'Electronics' },
+  { title: 'Shoes', value: 'Shoes' },
+  { title: 'Office', value: 'Office' },
+  { title: 'Games', value: 'Games' },
+])
+
+const stockStatus = ref([
+  { title: 'In Stock', value: true },
+  { title: 'Out of Stock', value: false },
+])
+
+// Data table options
+const itemsPerPage = ref(10)
+const page = ref(1)
+const sortBy = ref()
+const orderBy = ref()
+
+// Update data table options
+const updateOptions = (options: any) => {
+  sortBy.value = options.sortBy[0]?.key
+  orderBy.value = options.sortBy[0]?.order
+}
+
+const resolveStatus = (JReqOpen: string | null, JReqClose: string | null, KDClose: string | null): StatusResult => {
+  // ORDER OPEN: JReqOpen null
+  if (!JReqOpen)
+    return { text: 'ORDER OPEN', color: '#FACC15' } // Kuning
+
+  // OPEN: JReqOpen tidak null, KDClose null
+  if (JReqOpen && !KDClose)
+    return { text: 'OPEN', color: '#10B981' } // Hijau
+
+  // ORDER CLOSE: JReqOpen tidak null, KDClose tidak null
+  if (JReqOpen && KDClose)
+    return { text: 'ORDER CLOSE', color: '#3B82F6' } // Biru
+
+  // CLOSE: JReqClose tidak null
+  if (JReqClose)
+    return { text: 'CLOSE', color: '#1D4ED8' } // Biru gelap
+
+  // fallback
+  return { text: 'UNKNOWN', color: '#9CA3AF' } // Abu-abu
+}
+
+const { data: orderCenconData, execute: fetchOrders } = await useApi<any>(createUrl('/api/OrderCencon',
+  {
+    query: {
+      filter: searchQuery, // cocok dengan string? filter
+      // tglAwal: startDate?.toISOString(), // DateTime → string ISO
+      // tglAkhir: endDate?.toISOString(), // DateTime → string ISO
+      // cabang: selectedCabang, // string? cabang
+      start: page, // halaman
+      pageSize: itemsPerPage, // jumlah per halaman
+    },
+  },
+))
+
+// Callback untuk refresh saat ada pesan SignalR
+const onMessageReceived = () => {
+  fetchOrders()
+}
+
+// Setup SignalR
+const { messages, newMessageAlert, startConnection } = useSignalR(onMessageReceived)
+
+const orderCencon = computed((): ViewListData[] => orderCenconData.value.Data)
+const totalDataOrder = computed(() => orderCenconData.value.TotalCount)
+
+const prosesOrder = async (id: number) => {
+  console.log(id)
+
+  // await $api(`apps/ecommerce/listOrderCencon/${id}`, {
+  //   method: 'DELETE',
+  // })
+
+  // // Delete from selectedRows
+  // const index = selectedRows.value.findIndex(row => row === id)
+  // if (index !== -1)
+  //   selectedRows.value.splice(index, 1)
+
+  // // Refetch listOrderCencon
+  fetchOrders()
+}
+
+const formatTanggal = (tgl: string | null | undefined) => {
+  if (!tgl)
+    return '-'
+  const date = new Date(tgl)
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0') // 0 = Jan
+  const year = date.getFullYear()
+
+  return `${day}-${month}-${year}`
+}
+
+const formatJam = (jam: string | null | undefined) => {
+  if (!jam)
+    return '-'
+  const date = new Date(jam)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+
+  return `${hours}:${minutes}:${seconds}`
+}
+
+startConnection()
+
+const notificationSound = new Audio('sound/marimba.mp3')
+
+const enableAudio = () => {
+  notificationSound.play().catch(() => {}) // unlock audio
+}
+</script>
+
+<template>
+  <div>
+    <!-- 👉 listOrderCencon -->
+    <VCard
+      title="Filters"
+      class="mb-6"
+    >
+      <!--
+        <VCardText>
+        <VRow>
+        <VCol
+        cols="12"
+        sm="4"
+        >
+        <AppSelect
+        v-model="selectedStatus"
+        placeholder="Status"
+        :items="status"
+        clearable
+        clear-icon="tabler-x"
+        />
+        </VCol>
+
+        <VCol
+        cols="12"
+        sm="4"
+        >
+        <AppSelect
+        v-model="selectedCategory"
+        placeholder="Category"
+        :items="categories"
+        clearable
+        clear-icon="tabler-x"
+        />
+        </VCol>
+
+        <VCol
+        cols="12"
+        sm="4"
+        >
+        <AppSelect
+        v-model="selectedStock"
+        placeholder="Stock"
+        :items="stockStatus"
+        clearable
+        clear-icon="tabler-x"
+        />
+        </VCol>
+        </VRow>
+        </VCardText>
+      -->
+
+      <VDivider />
+
+      <div class="d-flex flex-wrap gap-4 ma-6">
+        <div class="d-flex align-center">
+          <!-- 👉 Search  -->
+          <AppTextField
+            v-model="searchQuery"
+            placeholder="Cari Order Cencon"
+            style="inline-size: 200px;"
+            class="me-3"
+          />
+        </div>
+
+        <VSpacer />
+        <div class="d-flex gap-4 flex-wrap align-center">
+          <AppSelect
+            v-model="itemsPerPage"
+            :items="[5, 10, 20, 25, 50]"
+          />
+          <VBtn
+            color="primary"
+            prepend-icon="tabler-plus"
+            @click="enableAudio"
+          >
+            Check Sound
+          </VBtn>
+        </div>
+      </div>
+
+      <VDivider class="mt-4" />
+
+      <!-- 👉 Datatable  -->
+      <VDataTableServer
+        v-model:items-per-page="itemsPerPage"
+        v-model:model-value="selectedRows"
+        v-model:page="page"
+        :headers="headers"
+        show-select
+        :items="orderCencon"
+        :items-length="totalDataOrder"
+        class="text-no-wrap"
+        @update:options="updateOptions"
+      >
+        <!-- product  -->
+        <template #item.NOWO="{ item }">
+          <div class="d-flex align-center gap-x-4">
+            <div class="d-flex flex-column">
+              <span class="text-body-1 font-weight-medium text-high-emphasis">{{ item.NOWO }}</span>
+              <!-- <span class="text-body-2">{{ item.productBrand }}</span> -->
+            </div>
+          </div>
+        </template>
+
+        <!-- stock -->
+        <template #item.WSID="{ item }">
+          <span class="text-body-1 text-high-emphasis">{{ item.WSID }}</span>
+        </template>
+
+        <!-- stock  -->
+        <template #item.Tanggal="{ item }">
+          {{ formatTanggal(item.Tanggal) }}
+        </template>
+
+        <template #item.Jam="{ item }">
+          {{ formatJam(item.Jam) }}
+        </template>
+
+        <!-- status -->
+        <template #item.status="{ item }">
+          <VChip
+            v-bind="resolveStatus(item.JReqOpen, item.JReqClose, item.KDClose)"
+            label
+            size="small"
+          />
+        </template>
+
+        <!--
+          <template #item.status="{ item }">
+          <VChip
+          :label="resolveStatus(item.JReqOpen, item.JReqClose, item.KDClose).text"
+          :color="resolveStatus(item.JReqOpen, item.JReqClose, item.KDClose).color"
+          density="default"
+          size="small"
+          />
+          </template>
+        -->
+
+        <!-- Actions -->
+        <template #item.actions="{ item }">
+          <IconBtn>
+            <VIcon
+              icon="tabler-edit"
+              @click="prosesOrder(item.Id)"
+            />
+          </IconBtn>
+        </template>
+
+        <!-- pagination -->
+        <template #bottom>
+          <TablePagination
+            v-model:page="page"
+            :items-per-page="itemsPerPage"
+            :total-items="totalDataOrder"
+          />
+        </template>
+      </VDataTableServer>
+    </VCard>
+  </div>
+</template>
