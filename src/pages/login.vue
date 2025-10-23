@@ -39,7 +39,7 @@ const refVForm = ref<VForm>()
 
 const credentials = ref({
   username: 'triady',
-  password: 'admin',
+  password: 'P@ssword',
 })
 
 // const rememberMe = ref(false)

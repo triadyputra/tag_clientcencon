@@ -8,7 +8,7 @@ definePage({
 })
 
 interface ViewListData {
-  Id: number
+  Id: number | null
   NOWO: string
   WSID: string
   Tanggal?: string | null // bisa string ISO atau null
@@ -41,12 +41,16 @@ const headers = [
   { title: 'JReq Open', key: 'JReqOpen' },
   { title: 'JReq Close', key: 'JReqClose' },
   { title: 'KD Close', key: 'KDClose' },
-  { title: 'Lokasi', key: 'Lokasi' },
+  { title: 'Status', key: 'Status' },
+
+  /* { title: 'Lokasi', key: 'Lokasi' }, */
   { title: 'Mesin', key: 'Mesin' },
-  { title: 'Nama Cabang', key: 'NMCABANG' },
-  { title: 'Status', key: 'status' },
+
+  /* { title: 'Nama Cabang', key: 'NMCABANG' }, */
   { title: 'Actions', key: 'actions', sortable: false }, // jika masih ada tombol aksi
 ]
+
+const isNewCardAddDialogVisible = ref(false)
 
 const selectedStatus = ref()
 const selectedCategory = ref()
@@ -54,10 +58,25 @@ const selectedStock = ref<boolean | undefined>()
 const searchQuery = ref('')
 const selectedRows = ref([])
 
+const currentOrderDetails = ref<ViewListData>({
+  Id: null,
+  NOWO: '',
+  WSID: '',
+  Tanggal: null, // bisa string ISO atau null
+  Jam: null, // bisa string ISO atau null
+  JReqOpen: null,
+  JReqClose: null,
+  KDClose: null,
+  Lokasi: null,
+  Mesin: null,
+  NMCABANG: null,
+})
+
 const status = ref([
-  { title: 'Scheduled', value: 'Scheduled' },
-  { title: 'Publish', value: 'Published' },
-  { title: 'Inactive', value: 'Inactive' },
+  { title: 'Order Open', value: 'ORDER OPEN' },
+  { title: 'Open', value: 'OPEN' },
+  { title: 'Order Close', value: 'ORDER CLOSE' },
+  { title: 'Close', value: 'CLOSE' },
 ])
 
 const categories = ref([
@@ -86,25 +105,15 @@ const updateOptions = (options: any) => {
   orderBy.value = options.sortBy[0]?.order
 }
 
-const resolveStatus = (JReqOpen: string | null, JReqClose: string | null, KDClose: string | null): StatusResult => {
-  // ORDER OPEN: JReqOpen null
-  if (!JReqOpen)
-    return { text: 'ORDER OPEN', color: '#FACC15' } // Kuning
-
-  // OPEN: JReqOpen tidak null, KDClose null
-  if (JReqOpen && !KDClose)
-    return { text: 'OPEN', color: '#10B981' } // Hijau
-
-  // ORDER CLOSE: JReqOpen tidak null, KDClose tidak null
-  if (JReqOpen && KDClose)
-    return { text: 'ORDER CLOSE', color: '#3B82F6' } // Biru
-
-  // CLOSE: JReqClose tidak null
-  if (JReqClose)
-    return { text: 'CLOSE', color: '#1D4ED8' } // Biru gelap
-
-  // fallback
-  return { text: 'UNKNOWN', color: '#9CA3AF' } // Abu-abu
+const orderStatus = (status: string) => {
+  if (status === 'Order Open')
+    return { text: 'ORDER OPEN', color: '#FACC15', icon: 'tabler-device-watch' }
+  if (status === 'Open')
+    return { text: 'OPEN', color: '#10B981', icon: 'tabler-home' }
+  if (status === 'Order Close')
+    return { text: 'ORDER CLOSE', color: '#3B82F6', icon: 'tabler-device-imac' }
+  if (status === 'Close')
+    return { text: 'CLOSE', color: '#1D4ED8', icon: 'tabler-shoe' }
 }
 
 const { data: orderCenconData, execute: fetchOrders } = await useApi<any>(createUrl('/api/OrderCencon',
@@ -131,8 +140,10 @@ const { messages, newMessageAlert, startConnection } = useSignalR(onMessageRecei
 const orderCencon = computed((): ViewListData[] => orderCenconData.value.Data)
 const totalDataOrder = computed(() => orderCenconData.value.TotalCount)
 
-const prosesOrder = async (id: number) => {
-  console.log(id)
+const prosesOrder = async (data: ViewListData) => {
+  console.log(data)
+  currentOrderDetails.value = data
+  isNewCardAddDialogVisible.value = !isNewCardAddDialogVisible.value
 
   // await $api(`apps/ecommerce/listOrderCencon/${id}`, {
   //   method: 'DELETE',
@@ -144,6 +155,7 @@ const prosesOrder = async (id: number) => {
   //   selectedRows.value.splice(index, 1)
 
   // // Refetch listOrderCencon
+  console.log(currentOrderDetails)
   fetchOrders()
 }
 
@@ -185,50 +197,50 @@ const enableAudio = () => {
       title="Filters"
       class="mb-6"
     >
-      <!--
-        <VCardText>
+      <VCardText>
         <VRow>
-        <VCol
-        cols="12"
-        sm="4"
-        >
-        <AppSelect
-        v-model="selectedStatus"
-        placeholder="Status"
-        :items="status"
-        clearable
-        clear-icon="tabler-x"
-        />
-        </VCol>
+          <VCol
+            cols="12"
+            sm="4"
+          >
+            <AppSelect
+              v-model="selectedStatus"
+              placeholder="Status"
+              :items="status"
+              clearable
+              clear-icon="tabler-x"
+            />
+          </VCol>
 
-        <VCol
-        cols="12"
-        sm="4"
-        >
-        <AppSelect
-        v-model="selectedCategory"
-        placeholder="Category"
-        :items="categories"
-        clearable
-        clear-icon="tabler-x"
-        />
-        </VCol>
+          <!--
+            <VCol
+            cols="12"
+            sm="4"
+            >
+            <AppSelect
+            v-model="selectedCategory"
+            placeholder="Category"
+            :items="categories"
+            clearable
+            clear-icon="tabler-x"
+            />
+            </VCol>
 
-        <VCol
-        cols="12"
-        sm="4"
-        >
-        <AppSelect
-        v-model="selectedStock"
-        placeholder="Stock"
-        :items="stockStatus"
-        clearable
-        clear-icon="tabler-x"
-        />
-        </VCol>
+            <VCol
+            cols="12"
+            sm="4"
+            >
+            <AppSelect
+            v-model="selectedStock"
+            placeholder="Stock"
+            :items="stockStatus"
+            clearable
+            clear-icon="tabler-x"
+            />
+            </VCol>
+          -->
         </VRow>
-        </VCardText>
-      -->
+      </VCardText>
 
       <VDivider />
 
@@ -251,7 +263,7 @@ const enableAudio = () => {
           />
           <VBtn
             color="primary"
-            prepend-icon="tabler-plus"
+            prepend-icon="tabler-volume"
             @click="enableAudio"
           >
             Check Sound
@@ -278,42 +290,52 @@ const enableAudio = () => {
           <div class="d-flex align-center gap-x-4">
             <div class="d-flex flex-column">
               <span class="text-body-1 font-weight-medium text-high-emphasis">{{ item.NOWO }}</span>
-              <!-- <span class="text-body-2">{{ item.productBrand }}</span> -->
+              <span class="text-body-2">{{ item.NMCABANG }}</span>
             </div>
           </div>
         </template>
 
         <!-- stock -->
         <template #item.WSID="{ item }">
-          <span class="text-body-1 text-high-emphasis">{{ item.WSID }}</span>
+          <span class="text-body-2 text-high-emphasis">{{ item.WSID }}</span>
         </template>
 
         <!-- stock  -->
         <template #item.Tanggal="{ item }">
-          {{ formatTanggal(item.Tanggal) }}
+          <span class="text-body-2">{{ formatTanggal(item.Tanggal) }}</span>
         </template>
 
         <template #item.Jam="{ item }">
-          {{ formatJam(item.Jam) }}
+          <span class="text-body-2">{{ formatJam(item.Jam) }}</span>
         </template>
 
-        <!-- status -->
-        <template #item.status="{ item }">
+        <template #item.Status="{ item }">
           <VChip
-            v-bind="resolveStatus(item.JReqOpen, item.JReqClose, item.KDClose)"
+            v-bind="orderStatus(item.Status)"
             label
             size="small"
           />
         </template>
 
         <!--
-          <template #item.status="{ item }">
-          <VChip
-          :label="resolveStatus(item.JReqOpen, item.JReqClose, item.KDClose).text"
-          :color="resolveStatus(item.JReqOpen, item.JReqClose, item.KDClose).color"
-          density="default"
-          size="small"
-          />
+          <template #item.Lokasi="{ item }">
+          <span class="text-body-2">{{ item.Lokasi }}</span>
+          </template>
+        -->
+
+        <template #item.Mesin="{ item }">
+          <div class="d-flex align-center gap-x-4">
+            <div class="d-flex flex-column">
+              <span class="text-body-1 font-weight-medium text-high-emphasis">{{ item.Mesin }}</span>
+              <span class="text-body-2">{{ item.Lokasi }}</span>
+            </div>
+          </div>
+          <!-- <span class="text-body-2">{{ item.Mesin }}</span> -->
+        </template>
+
+        <!--
+          <template #item.NMCABANG="{ item }">
+          <span class="text-body-2">{{ item.NMCABANG }}</span>
           </template>
         -->
 
@@ -322,7 +344,7 @@ const enableAudio = () => {
           <IconBtn>
             <VIcon
               icon="tabler-edit"
-              @click="prosesOrder(item.Id)"
+              @click="prosesOrder(item)"
             />
           </IconBtn>
         </template>
@@ -338,4 +360,9 @@ const enableAudio = () => {
       </VDataTableServer>
     </VCard>
   </div>
+
+  <CardUpdateOrderCencon
+    v-model:is-dialog-visible="isNewCardAddDialogVisible"
+    :card-details="currentOrderDetails"
+  />
 </template>
